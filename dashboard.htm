@@ -1,0 +1,70 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import pandas as pd
+import os
+from typing import List, Dict, Any
+
+from scrubber import DataScrubber
+from generator import SyntheticDataGenerator
+from evaluator import DataEvaluator
+
+app = FastAPI(
+    title="Synthetic Data & Privacy Engine API",
+    description="Production-grade API for PII masking, CTGAN synthesis, and statistical evaluation.",
+    version="2.0.0"
+)
+
+# Initialize modules
+scrubber = DataScrubber()
+
+class ScrubRequest(BaseModel):
+    data: List[Dict[str, Any]]
+
+class GenerateRequest(BaseModel):
+    data: List[Dict[str, Any]]
+    epochs: int = 50
+    num_rows: int = 10
+
+@app.get("/", response_class=HTMLResponse)
+def read_root():
+    """Serves the Web Dashboard UI on the root endpoint."""
+    dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    if os.path.exists(dashboard_path):
+        with open(dashboard_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return {"status": "online", "message": "Synthetic Data & Privacy Engine API is running"}
+
+@app.post("/scrub")
+def scrub_pii(request: ScrubRequest):
+    try:
+        df = pd.DataFrame(request.data)
+        cleaned_df = scrubber.scrub_dataframe(df)
+        return {"scrubbed_data": cleaned_df.to_dict(orient="records")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/generate-and-evaluate")
+def generate_and_evaluate(request: GenerateRequest):
+    try:
+        real_df = pd.DataFrame(request.data)
+        
+        # Step 1: Train CTGAN & Generate Synthetic Data
+        generator = SyntheticDataGenerator(epochs=request.epochs)
+        synthetic_df = generator.train_and_generate(real_df, num_rows=request.num_rows)
+        
+        # Step 2: Run Statistical Evaluation
+        evaluator = DataEvaluator(real_df, synthetic_df)
+        ks_results = evaluator.evaluate_distributions()
+        correlation_score = evaluator.compare_correlations()
+        
+        return {
+            "synthetic_data": synthetic_df.to_dict(orient="records"),
+            "evaluation_metrics": {
+                "ks_test": ks_results,
+                "correlation_similarity_score": f"{correlation_score:.2f}%"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

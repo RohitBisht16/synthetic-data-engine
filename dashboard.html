@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synthetic Data & Privacy Engine Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { background-color: #1e293b; border: 1px solid #334155; color: #f8fafc; margin-bottom: 20px; }
+        .form-control, .form-select { background-color: #0f172a; border: 1px solid #334155; color: #f8fafc; }
+        .form-control:focus, .form-select:focus { background-color: #0f172a; color: #f8fafc; border-color: #3b82f6; box-shadow: none; }
+        .table { color: #f8fafc; }
+        .table-dark { --bs-table-bg: #1e293b; }
+        
+        /* Active Tab Contrast & Styling Fix */
+        .nav-tabs .nav-link { color: #94a3b8 !important; border: none !important; }
+        .nav-tabs .nav-link.active { background-color: #3b82f6 !important; color: #ffffff !important; font-weight: 600; border-radius: 6px 6px 0 0; }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container-fluid">
+        <header class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom border-secondary">
+            <div>
+                <h1 class="h3 text-primary m-0">Synthetic Data & Privacy Engine</h1>
+                <p class="text-muted m-0 small">Enterprise PII Masking, CTGAN Synthesis & Differential Privacy Evaluation Studio</p>
+            </div>
+            <span class="badge bg-success fs-6">System Status: Active</span>
+        </header>
+
+        <div class="row">
+            <!-- Left Controls Panel -->
+            <div class="col-md-4">
+                <!-- Data Source Selection -->
+                <div class="card p-3">
+                    <h5 class="card-title text-info mb-3">1. Select Sample Dataset</h5>
+                    <select id="datasetSelect" class="form-select mb-3" onchange="loadPresetData()">
+                        <option value="medical">Medical Patient Records (PII & Diagnostic)</option>
+                        <option value="financial">Financial Credit Risk Dataset</option>
+                        <option value="churn">Customer Churn Analytics</option>
+                    </select>
+                </div>
+
+                <!-- Privacy & Scrubber Studio -->
+                <div class="card p-3">
+                    <h5 class="card-title text-info mb-3">2. PII Scrubber Engine</h5>
+                    <p class="small text-muted">Scrub names, emails, phones, and network indicators using SpaCy NLP & Regex pattern matchers.</p>
+                    <button id="scrubBtn" class="btn btn-warning w-100 fw-bold" onclick="runScrubber()">Execute PII Anonymization</button>
+                </div>
+
+                <!-- Differential Privacy CTGAN Studio -->
+                <div class="card p-3">
+                    <h5 class="card-title text-info mb-3">3. DP-CTGAN Generator</h5>
+                    <div class="mb-3">
+                        <label class="form-label small">Training Epochs: <span id="epochVal">20</span></label>
+                        <input type="range" class="form-range" min="10" max="200" value="20" id="epochsInput" oninput="document.getElementById('epochVal').innerText = this.value">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Synthetic Sample Rows: <span id="rowsVal">10</span></label>
+                        <input type="range" class="form-range" min="5" max="50" value="10" id="rowsInput" oninput="document.getElementById('rowsVal').innerText = this.value">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Differential Privacy (&epsilon;-Epsilon): <span id="epsVal">1.5</span></label>
+                        <input type="range" class="form-range" min="0.1" max="10" step="0.1" value="1.5" id="epsInput" oninput="document.getElementById('epsVal').innerText = this.value">
+                    </div>
+                    <button id="synthBtn" class="btn btn-primary w-100 fw-bold" onclick="runSynthesis()">Train & Generate Synthetic Data</button>
+                </div>
+            </div>
+
+            <!-- Right Output Display Panel -->
+            <div class="col-md-8">
+                <!-- Data Tables -->
+                <div class="card p-3">
+                    <ul class="nav nav-tabs border-secondary mb-3" id="myTab" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw" type="button">Raw Production Data</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="scrubbed-tab" data-bs-toggle="tab" data-bs-target="#scrubbed" type="button">Anonymized Output</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="synthetic-tab" data-bs-toggle="tab" data-bs-target="#synthetic" type="button">Synthetic Data Output</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="myTabContent">
+                        <div class="tab-pane fade show active" id="raw">
+                            <div class="table-responsive" style="max-height: 250px;">
+                                <table class="table table-dark table-striped table-hover small" id="rawTable"></table>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="scrubbed">
+                            <div class="table-responsive" style="max-height: 250px;">
+                                <table class="table table-dark table-striped table-hover small" id="scrubbedTable"></table>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="synthetic">
+                            <div class="table-responsive" style="max-height: 250px;">
+                                <table class="table table-dark table-striped table-hover small" id="syntheticTable"></table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistical Fidelity Chart -->
+                <div class="card p-3">
+                    <h5 class="card-title text-info mb-2">Statistical Fidelity Metrics (Kolmogorov-Smirnov Test)</h5>
+                    <div style="height: 220px;">
+                        <canvas id="ksChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const sampleDatasets = {
+            medical: [
+                { User_ID: 101, Name: "Rohit Bisht", Email: "rohit@gmail.com", Phone: "9876543210", Age: 24, CreditScore: 720 },
+                { User_ID: 102, Name: "Alice Smith", Email: "alice@company.org", Phone: "9123456789", Age: 38, CreditScore: 680 },
+                { User_ID: 103, Name: "David Miller", Email: "david@yahoo.com", Phone: "9988776655", Age: 45, CreditScore: 810 }
+            ],
+            financial: [
+                { Account_ID: 501, Holder: "John Doe", Contact: "john@bank.com", Balance: 15400, Risk_Level: 2 },
+                { Account_ID: 502, Holder: "Emma Watson", Contact: "emma@finance.io", Balance: 82000, Risk_Level: 1 },
+                { Account_ID: 503, Holder: "Michael Scott", Contact: "michael@scranton.com", Balance: 3200, Risk_Level: 4 }
+            ],
+            churn: [
+                { Customer_ID: 901, Name: "Sarah Connor", IP_Address: "192.168.1.45", MonthlyCharges: 89.5, Churn: "No" },
+                { Customer_ID: 902, Name: "Kyle Reese", IP_Address: "10.0.0.12", MonthlyCharges: 45.0, Churn: "Yes" }
+            ]
+        };
+
+        let currentRawData = [];
+        let chartInstance = null;
+
+        function renderTable(tableId, data) {
+    const table = document.getElementById(tableId);
+    if (!data || data.length === 0) {
+        table.innerHTML = "<tr><td class='text-muted p-3'>No data generated yet. Click 'Train & Generate Synthetic Data' to process.</td></tr>";
+        return;
+    }
+    const headers = Object.keys(data[0]);
+    let headerHtml = "<thead><tr>" + headers.map(h => `<th>${h}</th>`).join('') + "</tr></thead>";
+    let bodyHtml = "<tbody>" + data.map(row => {
+        return "<tr>" + headers.map(h => `<td>${row[h] !== null ? row[h] : ''}</td>`).join('') + "</tr>";
+    }).join('') + "</tbody>";
+    table.innerHTML = headerHtml + bodyHtml;
+}
+
+        function loadPresetData() {
+            const selected = document.getElementById("datasetSelect").value;
+            currentRawData = sampleDatasets[selected];
+            renderTable("rawTable", currentRawData);
+            renderTable("scrubbedTable", []);
+            renderTable("syntheticTable", []);
+        }
+
+        async function runScrubber() {
+            const btn = document.getElementById("scrubBtn");
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span> Anonymizing PII...`;
+
+            try {
+                const response = await fetch('/scrub', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: currentRawData })
+                });
+                const result = await response.json();
+                renderTable("scrubbedTable", result.scrubbed_data);
+                
+                const scrubbedTab = new bootstrap.Tab(document.getElementById('scrubbed-tab'));
+                scrubbedTab.show();
+            } catch (err) {
+                alert("Error during scrubbing: " + err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        async function runSynthesis() {
+    const btn = document.getElementById("synthBtn");
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status"></span> Training CTGAN Model...`;
+
+    const epochs = parseInt(document.getElementById("epochsInput").value);
+    const rows = parseInt(document.getElementById("rowsInput").value);
+
+    try {
+        const response = await fetch('/generate-and-evaluate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: currentRawData, epochs: epochs, num_rows: rows })
+        });
+        const result = await response.json();
+        
+        renderTable("syntheticTable", result.synthetic_data);
+
+        // Safe metric extraction
+        const ksMetrics = result?.evaluation_metrics?.ks_test || {};
+        const labels = Object.keys(ksMetrics);
+        const pValues = labels.map(k => ksMetrics[k].p_value);
+
+        if (chartInstance) chartInstance.destroy();
+        const ctx = document.getElementById('ksChart').getContext('2d');
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels.length > 0 ? labels : ['No Numeric Columns'],
+                datasets: [{
+                    label: 'Distribution Similarity (P-Value)',
+                    data: pValues.length > 0 ? pValues : [0],
+                    backgroundColor: '#3b82f6'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, max: 1.0 } }
+            }
+        });
+
+        const syntheticTab = new bootstrap.Tab(document.getElementById('synthetic-tab'));
+        syntheticTab.show();
+    } catch (err) {
+        alert("Error during CTGAN synthesis: " + err);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+        window.onload = loadPresetData;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
